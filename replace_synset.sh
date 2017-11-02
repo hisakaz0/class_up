@@ -5,9 +5,10 @@
 # Output:
 #   image_path, label
 
-pairs_synsets="$1"
-label="$2"
-synset="$3"
+out="$1"
+pairs_synsets="$2"
+label="$3"
+synset="$4"
 
 egrep " ${synset}$" $pairs_synsets |
-sed -e "s@ $synset@ $label@g"
+sed -e "s@ $synset@ $label@g" > "$out/synset.$label"

@@ -1,4 +1,4 @@
-#!/bin/bash -ex
+#!/bin/bash -e
 
 #-----------------------------------------------------------------------------
 # Functions
@@ -88,21 +88,28 @@ sort > "$out/`basename $synsets`"
 ## choose line only matching the label in $pairs,
 ## and replace label with synset
 print_stderr "replacing label"
-cat $synsets                | # synset
+len_synsets=`cat $synsets | wc -l`
+cat $synsets                                       | # synset
 awk ' BEGIN { i=0 }
       { print i,$1;
-        i += 1 }'           | # index, synset
+        i += 1 }'                                  | # index, synset
 xargs -P$NUM_PARALLEL -n2 \
-  $cmd_replace_label $pairs | # image_path, synset
+  $cmd_replace_label $out $pairs                     # image_path, synset > label.$label
+cat `eval echo $out/label.{0..$((len_synsets-1))}` | # cat label.$label
 sort > "$out/pairs_synsets.txt"
 
 ## replace synset with new label
 print_stderr "replacing synset"
-cat "$out/`basename $synsets`"                 | # synset
+cat "$out/`basename $synsets`"                      | # synset
 awk ' BEGIN { i=0 }
       { print i,$1;
-        i += 1}'                               | # index, synset
+        i += 1}'                                    | # index, synset
 xargs -P$NUM_PARALLEL -n2 \
-  $cmd_replace_synset "$out/pairs_synsets.txt" | # image_path, label
+  $cmd_replace_synset \
+  $out "$out/pairs_synsets.txt"                       # image_path, label > synset.$label
+cat `eval echo $out/synset.{0..$((NUM_SYNSETS-1))}` | # cat synset.$label
 sort > "$out/`basename $pairs`"
 
+## remove tempolary files
+rm -f `eval echo $out/label.{0..$((len_synsets-1))}`
+rm -f `eval echo $out/synset.{0..$((NUM_SYNSETS-1))}`
