@@ -32,6 +32,8 @@ NUM_SYNSETS=100
 # Sub commands
 cmd_get_parent="./get_parent.sh"
 cmd_get_leaf="./get_leaf.sh"
+cmd_get_root="./get_root.sh"
+cmd_get_common_root_synsets="./get_common_root_synsets.sh"
 cmd_replace_label="./replace_label.sh"
 cmd_replace_synset="./replace_synset.sh"
 
@@ -78,7 +80,7 @@ done
 
 ## get leaf(original synset)
 print_stderr "creating new synsets"
-level=$((level-1))
+level=$((level-1)) # last_level
 current_synsets="$out/synsets.$level"
 head -n$NUM_SYNSETS $current_synsets | # synset
 xargs -P$NUM_PARALLEL -n1 \
@@ -109,6 +111,31 @@ xargs -P$NUM_PARALLEL -n2 \
   $out "$out/pairs_synsets.txt"                       # image_path, label > synset.$label
 cat `eval echo $out/synset.{0..$((NUM_SYNSETS-1))}` | # cat synset.$label
 sort > "$out/`basename $pairs`"
+
+## creating reference pairs
+cat $synsets                  | # synset
+awk -v level="$level"         \
+  '{ print $1,level }'        | # synset, level
+xargs -P$NUM_PARALLEL -n2     \
+  $cmd_get_root               | # synset, root_synset
+sort -n > "$out/synsets.root"
+
+cat $synsets                   | # synset
+awk -v f="$out/synsets.root"   \
+  '{ print $1,f }'             | # synset, root_synsets(file)
+xargs -P$NUM_PARALLEL -n2      \
+  $cmd_get_common_root_synsets | # synsets, common_root_synset, ...
+sort -n > "$out/synsets.reference"
+
+cat "$out/pairs_synsets.txt"      | # image_path, synset
+awk -v f="$out/synsets.reference" \
+  '{ print $1,$2,f }'             | # image_path, synset, reference_synsets(file)
+xargs -P$NUM_PARALLEL -n2         \
+  $cmd_replace_labels             | # image_path, synset, ...
+
+# replacing synsets with labels
+
+
 
 ## remove tempolary files
 rm -f `eval echo $out/label.{0..$((len_synsets-1))}`
