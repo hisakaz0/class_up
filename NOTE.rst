@@ -44,3 +44,15 @@ referenceを作る必要がある。
     synsetsをlevel Nのsynsetsとして確定する。
 候補2:
     hypernymをやったときに、マージ後のsynset数が最大となるように
+
+
+
+    
+------------------------------------------------------------------------------
+全ての親を考慮した場合におけるsynsetの集約::
+    Level: 1 | Number of synsets: 1000
+    Level: 2 | Number of synsets: 546
+    Level: 3 | Number of synsets: 243
+    Level: 4 | Number of synsets: 121
+    Level: 5 | Number of synsets: 63
+
