@@ -15,9 +15,17 @@ reset_file () {
 out='res/005'
 mkdir -p $out
 
+## individual mode
+#time ./class_up.py \
+#  --out $out \
+#  --write_individual \
+#  imagenet-files/wordnet.is_a.txt \
+#  imagenet-files/synsets.txt \
+#  imagenet-files/train.txt \
+#  imagenet-files/val.txt
+
 time ./class_up.py \
   --out $out \
-  --write_individual \
   imagenet-files/wordnet.is_a.txt \
   imagenet-files/synsets.txt \
   imagenet-files/train.txt \
