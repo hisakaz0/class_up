@@ -45,16 +45,16 @@ def main():
             synsets = pickle.load(f)
     else:
         synsets.make_subset(isa, num_synsets)
-        print("Writing subset synsets.")
-        synsets.write_subset(os.path.join(args.out, 'synsets.txt'))
         print("Dumping pickle of synsets.")
         with open(pickle_synsets, 'wb') as f:
             pickle.dump(synsets, f)
+    print("Writing subset synsets.")
+    synsets.write_subset(os.path.join(args.out, 'synsets.txt'))
 
     def pairs_process(pairs, subset, out, num):
         basename = os.path.basename(pairs).split('.')[0]
 
-        print("Loading val pairs file: {}".format(pairs))
+        print("Loading pairs file: {}".format(pairs))
         pairs = Pairs(pairs)
 
         pickle_pairs = os.path.join(out, "{}-pairs.pickle.py".format(basename))
@@ -65,20 +65,20 @@ def main():
         else:
             print("Making list of selected pairs")
             pairs.make_selected_pairs(subset)
-            print("Making list of subset labels.")
-            pairs.add_subset_label_all(subset)
             print("Selecting pairs")
-            pairs.select_pairs(num)
-            print("Making list of reference_labels.")
-            pairs.add_reference_labels_all(subset)
+            pairs.select_pairs(num, subset)
+            # print("Making list of subset labels.")
+            # pairs.add_subset_label_all(subset)
+            # print("Making list of reference_labels.")
+            # pairs.add_reference_labels_all(subset)
             print("Dumping list of pairs")
             with open(pickle_pairs, 'wb') as f:
                 pickle.dump(pairs, f)
 
-        print("Writing subset pairs")
+        print("Writing subset pairs with new label")
         pairs.write_subset_all(os.path.join(out, basename + "-subset.txt"))
-        print("Writing reference pairs")
-        pairs.write_reference_all(os.path.join(out, basename + "-reference.txt"))
+        print("Writing original and reference pairs with multi labels")
+        pairs.write_reference_and_original(os.path.join(out, basename + "-org-ref.txt"))
 
     def pairs_eval_individual(pairs, subset, out):
         basename = os.path.basename(pairs).split('.')[0]
@@ -352,9 +352,9 @@ class Synsets:
         # pp(common_root_synsets)
 
         last_level_subset = []
-        for key, values in common_root_synsets.items():
+        for key, values in common_root_synsets.items(): # key is index for synset(i) in check_len()
             synset = self.synsets[key]
-            for value in values:
+            for value in values: # value is index for synset(j) in check_len()
                 synset.common_root_synsets.append(self.synsets[value])
             last_level_subset.append(synset)
         self.last_level_subset = last_level_subset
@@ -369,9 +369,9 @@ class Synsets:
         self.subset = self.last_level_subset[:num_synsets]
         print("Number of synset in subset: {}". format(len(self.subset)))
 
-        # for synset in self.subset:
-        #     str_labels = [str(l) for l in synset.common_root_labels]
-        #     print("org_label: {0:3d} | common_root_labels: {1}". format(synset.org_label, " ".join(str_labels)))
+        for synset in self.subset:
+            str_labels = [str(l) for l in synset.common_root_labels]
+            print("org_label: {0:3d} | common_root_labels: {1}". format(synset.org_label, " ".join(str_labels)))
 
     def load_subset_order(self):
         pass
@@ -403,9 +403,9 @@ class Pairs:
             self.org_pairs.append(Pair(image_path, int(label)))
 
     def make_selected_pairs(self, subset):
-        # last_level_subset - subsetのsynsetに該当するpairを除外する
+        # last_level_subsetからsubsetを引いたsynsetsに該当するsynsetを除外する
         pairs = []
-        labels = [label for synset in subset for label in synset.common_root_labels]
+        labels = set([label for synset in subset for label in synset.common_root_labels])
         for pair in self.org_pairs:
             if pair.org_label in labels:
                 pairs.append(pair)
@@ -422,11 +422,12 @@ class Pairs:
 
     def add_reference_labels_all(self, subset):
         def get_reference_labels(label, subset):
+            labels = []
             for synset in subset:
                 if synset.has_common_root_labels(label):
-                    return synset.common_root_labels
-            # 1000クラスは何処かに集約されるので、エラーを吐く
-            raise ValueError
+                    # 1つのsynsetにたどり着ける可能性は1つではない
+                    labels += synset.common_root_labels
+            return list(set(labels))
         for pair in self.pairs:
             pair.reference_labels = get_reference_labels(pair.org_label, subset)
 
@@ -447,27 +448,35 @@ class Pairs:
         If the target label is founed, take the label from subset of synsets.
         Else, return `None'"""
         def get_subset_label(label, subset):
+            indexes = []
             for index, synset in enumerate(subset): # index as label
                 if synset.has_common_root_labels(label):
-                    return index
-            # 1000クラスは何処かに集約されるので、エラーを吐く
-            raise ValueError
+                    # 1つのsynsetにたどり着ける可能性は1つではない
+                    # get_reference_label_allと同様
+                    indexes.append(index)
+            np.random.shuffle(indexes)
+            return indexes[0]
         for pair in self.pairs:
             pair.subset_label = get_subset_label(pair.org_label, subset)
 
-    def select_pairs(self, num):
+    def select_pairs(self, num, subset):
         # subset_label毎にpairをまとめる
-        subset_pairs = {}
-        for pair in self.pairs:
-            if not pair.subset_label in subset_pairs.keys():
-                subset_pairs[pair.subset_label] = []
-            subset_pairs[pair.subset_label].append(pair)
+        def create_selected_pairs(synset, num):
+            selected_pairs = []
+            # pairの重複が考えられるので、pair loopをsubset_labelごとに回す
+            for pair in self.pairs:
+                if pair.org_label in synset.common_root_labels:
+                    selected_pairs.append(pair)
+            num = len(selected_pairs) if len(selected_pairs) < num else num
+            np.random.shuffle(selected_pairs)
+            return selected_pairs[:num]
+
         self.selected_pairs = {}
-        for key, values in subset_pairs.items():
-            num = len(values) if len(values) < num  else num # 集約先がなく、1クラスであれば全部
-            np.random.shuffle(values)
-            selected_pairs = values[:num]
-            self.selected_pairs[key] = selected_pairs
+        for index, synset in enumerate(subset):
+            self.selected_pairs[index] = {
+                    'pairs': create_selected_pairs(synset, num),
+                    'common_root_labels': synset.common_root_labels,
+                    'subset_label': index }
 
     def write_reference(self, out):
         """Also `writing_subset', this method writes only pairs related with
@@ -489,8 +498,29 @@ class Pairs:
                     f.write("{} {}\n".format(
                         pair.image_path, " ".join(str_labels)))
 
+    def write_reference_and_original(self, out):
+        """Also `writing_subset', this method writes only pairs related with
+        subset synsets only"""
+        with open(out, 'w') as f:
+            for key, pairs in self.selected_pairs.items():
+                # print('subset_label: {} | common_root_labels: {}'
+                #         . format(pairs['subset_label'],
+                #             " ".join([str(l) for l in pairs['common_root_labels']])))
+                common_root_labels = pairs['common_root_labels']
+                pairs = pairs['pairs']
+                for pair in pairs:
+                    org_label = pair.org_label
+                    common_root_labels_wo_org = list(
+                            set([org_label]) ^
+                            set(common_root_labels))
+                    str_labels = [str(l) for l in common_root_labels_wo_org]
+                    f.write("{} {} {}\n".format( pair.image_path, org_label, " ".join(str_labels)))
+                    # print("img: {} | org_label: {} | wo_org: {}"
+                    #         .format( pair.image_path, org_label, " ".join(str_labels)))
+
+
     def write_subset(self, out):
-        """Writing pairs related with subset synsets only.
+        """Writing pairs rejated with subset synsets only.
         If a label of the pair is not found, the pair line is not write."""
         with open(out, 'w') as f:
             for pair in self.pairs:
@@ -502,8 +532,20 @@ class Pairs:
         If a label of the pair is not found, the pair line is not write."""
         with open(out, 'w') as f:
             for key, pairs in self.selected_pairs.items(): # key is subset label
+                # print("subset_label: {} | len(pairs): {}"
+                #         . format(pairs['subset_label'], len(pairs['pairs'])))
+                subset_label = pairs['subset_label']
+                pairs = pairs['pairs']
                 for pair in pairs:
-                    f.write("{} {}\n". format(pair.image_path, key))
+                    f.write("{} {}\n". format(pair.image_path, subset_label))
+
+    def write_original_all(self, out):
+        """Also `writing_subset', this method writes only pairs related with
+        subset synsets only"""
+        with open(out, 'w') as f:
+            for pairs in self.selected_pairs.values():
+                for pair in pairs:
+                    f.write("{} {}\n".format(pair.image_path, pair.org_label))
 
     def write_individual_reference(self, synset, out):
         lines = []
