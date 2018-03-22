@@ -12,7 +12,7 @@ reset_file () {
 }
 
 
-out='res/005'
+out='res/007'
 mkdir -p $out
 
 ## individual mode
